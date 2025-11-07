@@ -31,7 +31,7 @@ async function main() {
 
   const result = await run(
     mathXAgent,
-    "Give me questions of contest Clash of Coders whose answer is A"
+    "Tell me who is 10 topppers of clash of coders contest"
   );
 
   console.log("✅ Final Output:\n", result.finalOutput);

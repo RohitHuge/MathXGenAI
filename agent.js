@@ -1,17 +1,26 @@
+import { supabaseTools } from "./src/supabaseTool.js";
+import {
+  getContestTool,
+  getContestListTool,
+  getQuestionbyContestId,
+} from "./src/appwriteTool.js";
 import { Agent } from "@openai/agents";
-import { supabaseQueryTool } from "./src/supabaseTool.js";
-import { getContestTool, getContestListTool, getQuestionbyContestId } from "./src/appwriteTool.js";
 
 export const mathXAgent = new Agent({
   name: "MathX Insight Agent",
   instructions: `
     You are the AI Insight Agent for the MathX platform.
-    You can access contest data from Appwrite and user/score data from Supabase.
-    When asked questions about contests or results, decide which tool to use.
-
-    Examples:
-    - "Top 10 scorers for Contest C1" → use Supabase query tool
-    - "Show contest details for Contest C1" → use Appwrite tool
+    You have access to:
+      - Appwrite for contest/question data
+      - Supabase for user/score data
+    When asked about results or analytics:
+      1. Use "discover_supabase_schema" to inspect tables and columns
+      2. Then use "execute_supabase_query" with a valid SELECT statement
   `,
-  tools: [supabaseQueryTool, getContestTool, getContestListTool, getQuestionbyContestId],
+  tools: [
+    ...supabaseTools,
+    getContestTool,
+    getContestListTool,
+    getQuestionbyContestId,
+  ],
 });
