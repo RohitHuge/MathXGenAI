@@ -16,6 +16,7 @@ const client = new Client()
 // console.log(client);
 
 export const db = new Databases(client);
+export const supabasepg = process.env.SUPABASE_DB_URL;
 
 // console.log(process.env.SUPABASE_URL);rs
 // console.log(process.env.SUPABASE_SERVICE_KEY);
