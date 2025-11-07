@@ -1,0 +1,23 @@
+{
+  "name": "mathxgenai",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node run.js",
+    "dev": "node run.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@openai/agents": "^0.3.0",
+    "@supabase/supabase-js": "^2.80.0",
+    "dotenv": "^17.2.3",
+    "node-appwrite": "^20.3.0",
+    "nodemon": "^3.1.10",
+    "zod": "^3.25.76"
+  }
+}
