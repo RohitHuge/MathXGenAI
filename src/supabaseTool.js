@@ -85,6 +85,8 @@ export const directPgTool = tool({
   }),
   async execute({ query }) {
     try {
+
+      console.log(`🧩 Supabase Tool: Executing query: ${query}`);
       const client = new Client({
         connectionString: supabasepg,
         ssl: { rejectUnauthorized: false },

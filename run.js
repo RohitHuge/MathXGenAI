@@ -32,7 +32,7 @@ async function main() {
 
   const result = await run(
     mathXAgent,
-    "Tell me who is 10 topppers of clash of coders contest"
+    "Add the data in the leaderboard view table from the database and make it upto to date"
   );
 
   console.log("✅ Final Output:\n", result.finalOutput);
