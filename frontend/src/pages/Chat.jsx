@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { LogOut, Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
+import { LogOut, Send, Bot, User, Loader2, Sparkles, Mic, MicOff } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useSpeechToText } from '../hooks/useSpeechToText';
 
 export default function Chat() {
     const { user, logout } = useAuth();
@@ -12,6 +13,46 @@ export default function Chat() {
     const [loading, setLoading] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(true);
     const messagesEndRef = useRef(null);
+
+    // Speech to Text Hook
+    const { isListening, transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechToText();
+
+    // Update input when transcript changes
+    useEffect(() => {
+        if (transcript) {
+            setInput((prev) => {
+                // If the transcript is just appending to existing text, handle it gracefully
+                // For simplicity, we'll just append the new transcript part if it's not already there
+                // But since our hook appends to its own transcript state, we might just want to 
+                // replace the input or append carefully.
+                // Let's try appending the *new* part. 
+                // Actually, a simpler way for this MVP is to just set the input to the transcript
+                // if the input was empty, or append if not.
+                // However, the hook accumulates 'transcript'. 
+                // Let's just set input to transcript for now to avoid duplication issues 
+                // if the user types while speaking.
+                // Better UX: Append transcript to current input, but we need to manage the diff.
+                // Simplest robust UX: 
+                // When listening starts, we can clear transcript. 
+                // Then we append `transcript` to `input`.
+                // But `transcript` keeps growing. 
+                // Let's just use the transcript as the source of truth while listening?
+                // No, user might type.
+
+                // Let's just append the *latest* transcript. 
+                // Actually, let's change the strategy: 
+                // When speech ends (isListening becomes false), we append the final transcript to input.
+                // But we want real-time feedback.
+
+                // Let's try this: 
+                // We will use a ref or just simple logic: 
+                // We'll append the *difference* or just let the user see the transcript building up.
+                return prev + (prev.endsWith(' ') ? '' : ' ') + transcript.trim();
+            });
+            // Clear transcript from hook so it doesn't get re-appended
+            resetTranscript();
+        }
+    }, [transcript, resetTranscript]);
 
     useEffect(() => {
         loadChatHistory();
@@ -98,6 +139,14 @@ export default function Chat() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
+        }
+    };
+
+    const toggleListening = () => {
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening();
         }
     };
 
@@ -231,26 +280,46 @@ export default function Chat() {
             {/* Input Section */}
             <div className="border-t border-slate-800 bg-slate-900/50 backdrop-blur-xl px-4 py-4 sticky bottom-0">
                 <div className="max-w-4xl mx-auto">
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 items-end">
                         <textarea
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyPress={handleKeyPress}
-                            placeholder="Ask me anything about MathX data..."
+                            placeholder={isListening ? "Listening..." : "Ask me anything about MathX data..."}
                             rows="1"
                             disabled={loading}
-                            className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none text-white placeholder-slate-500 resize-none transition disabled:opacity-50"
+                            className={`flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none text-white placeholder-slate-500 resize-none transition disabled:opacity-50 ${isListening ? 'ring-2 ring-cyan-500/50 bg-cyan-900/10' : ''}`}
                             style={{ minHeight: '48px', maxHeight: '120px' }}
                         />
+
+                        {/* Microphone Button */}
+                        {hasSupport && (
+                            <button
+                                onClick={toggleListening}
+                                className={`p-3 rounded-xl transition-all duration-200 flex items-center justify-center ${isListening
+                                        ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 animate-pulse'
+                                        : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-700'
+                                    }`}
+                                title={isListening ? "Stop listening" : "Start voice input"}
+                            >
+                                {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                            </button>
+                        )}
+
                         <button
                             onClick={handleSend}
                             disabled={!input.trim() || loading}
-                            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2 shadow-lg shadow-cyan-500/30"
+                            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2 shadow-lg shadow-cyan-500/30 h-[48px]"
                         >
                             <Send className="w-5 h-5" />
                             <span className="hidden sm:inline">Send</span>
                         </button>
                     </div>
+                    {isListening && (
+                        <p className="text-xs text-cyan-400 mt-2 ml-1 animate-pulse">
+                            🎤 Listening... Speak now
+                        </p>
+                    )}
                 </div>
             </div>
         </div>
