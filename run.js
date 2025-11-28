@@ -36,4 +36,7 @@ async function main() {
   console.log("🧠 Actions performed:", result.actions);
 }
 
-main().catch(console.error);
+// Only run if this file is executed directly (not imported)
+if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
+  main().catch(console.error);
+}
