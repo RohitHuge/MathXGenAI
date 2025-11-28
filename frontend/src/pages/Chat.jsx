@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { LogOut, Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function Chat() {
     const { user, logout } = useAuth();
@@ -182,12 +183,12 @@ export default function Chat() {
 
                                 <div className={`max-w-3xl ${message.sender === 'user' ? 'order-first' : ''}`}>
                                     <div className={`rounded-2xl px-4 py-3 ${message.sender === 'user'
-                                            ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
-                                            : 'bg-slate-800/50 border border-slate-700'
+                                        ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
+                                        : 'bg-slate-800/50 border border-slate-700'
                                         }`}>
                                         {message.sender === 'agent' ? (
                                             <div className="prose prose-invert prose-sm max-w-none text-slate-200">
-                                                <ReactMarkdown>{message.text}</ReactMarkdown>
+                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
                                             </div>
                                         ) : (
                                             <p className="text-white">{message.text}</p>
