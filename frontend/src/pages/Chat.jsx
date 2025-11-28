@@ -5,6 +5,10 @@ import { LogOut, Send, Bot, User, Loader2, Sparkles, Mic, MicOff } from 'lucide-
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSpeechToText } from '../hooks/useSpeechToText';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
 
 export default function Chat() {
     const { user, logout } = useAuth();
@@ -237,7 +241,13 @@ export default function Chat() {
                                         }`}>
                                         {message.sender === 'agent' ? (
                                             <div className="prose prose-invert prose-sm max-w-none text-slate-200">
-                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm, remarkMath]}
+                                                    rehypePlugins={[rehypeKatex]}
+                                                >
+                                                    {message.text}
+                                            </ReactMarkdown>
+
                                             </div>
                                         ) : (
                                             <p className="text-white">{message.text}</p>
