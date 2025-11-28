@@ -1,14 +1,13 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import dotenv from "dotenv";
-import { supabase } from "../run.js";
 import { supabasepg } from "../run.js";
 import { Client } from "pg";
 dotenv.config();
 
 /**
  * 🧠 Tool #1: List All Tables
- * Fetches all public tables using RPC list_public_tables.
+ * Fetches all public tables using direct PG query.
  */
 export const listSupabaseTablesTool = tool({
   name: "list_supabase_tables",
@@ -19,11 +18,24 @@ export const listSupabaseTablesTool = tool({
   parameters: z.object({}),
   async execute() {
     try {
-      console.log("🧭 Supabase Tool: Listing all tables...");
-      const { data, error } = await supabase.rpc("list_public_tables");
-      if (error) throw error;
+      console.log("🧭 Supabase Tool: Listing all tables via PG...");
 
-      const tableList = data.map((t) => t.table_name);
+      const client = new Client({
+        connectionString: supabasepg,
+        ssl: { rejectUnauthorized: false },
+      });
+      await client.connect();
+
+      const query = `
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+      `;
+
+      const { rows } = await client.query(query);
+      await client.end();
+
+      const tableList = rows.map((t) => t.table_name);
       console.log("✅ Tables Found:", tableList);
 
       return JSON.stringify({
@@ -38,7 +50,7 @@ export const listSupabaseTablesTool = tool({
 
 /**
  * 🧠 Tool #2: Get Table Schema
- * Fetches column names and data types for a given table using RPC get_table_schema.
+ * Fetches column names and data types for a given table using direct PG query.
  */
 export const getSupabaseTableSchemaTool = tool({
   name: "get_supabase_table_schema",
@@ -51,19 +63,29 @@ export const getSupabaseTableSchemaTool = tool({
   }),
   async execute({ tableName }) {
     try {
-      console.log(`📘 Supabase Tool: Getting schema for table '${tableName}'`);
+      console.log(`📘 Supabase Tool: Getting schema for table '${tableName}' via PG`);
 
-      const { data, error } = await supabase.rpc("get_table_schema", {
-        tablename: tableName,
+      const client = new Client({
+        connectionString: supabasepg,
+        ssl: { rejectUnauthorized: false },
       });
+      await client.connect();
 
-      if (error) throw error;
-      if (!data || data.length === 0)
+      const query = `
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = $1
+      `;
+
+      const { rows } = await client.query(query, [tableName]);
+      await client.end();
+
+      if (!rows || rows.length === 0)
         return `⚠️ No schema found for table '${tableName}'.`;
 
-      console.log("✅ Schema:", data);
+      console.log("✅ Schema:", rows);
 
-      const formatted = data.map(
+      const formatted = rows.map(
         (c) => `${c.column_name} (${c.data_type})`
       );
       return `🧩 Table '${tableName}' Columns:\n${formatted.join("\n")}`;
@@ -75,7 +97,7 @@ export const getSupabaseTableSchemaTool = tool({
 
 /**
  * 🧠 Tool #3: Execute Safe SQL Query
- * Executes only SELECT queries using the built-in exec_sql RPC.
+ * Executes only SELECT queries using pg client.
  */
 export const directPgTool = tool({
   name: "execute_postgres_query",
