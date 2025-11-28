@@ -21,6 +21,12 @@ export default function ProtectedRoute({ children }) {
         return <Navigate to="/login" replace />;
     }
 
+    console.log("user", user); 
+
+    if (user.labels[0] === "admin") {
+        return children;
+    }
+
     // Render protected content if authenticated
-    return children;
+    return <> Access Denied </>;
 }
