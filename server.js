@@ -4,10 +4,23 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { run } from "@openai/agents";
 import { mathXAgent } from "./agent.js";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import { initAgent } from "./src/agents/initAgent.js";
+import { questionUploadAgent } from "./src/agents/questionUploadAgent.js";
+import { addSSEClient, removeSSEClient } from "./src/utils/sse.js";
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+    cors: {
+        origin: "*", // Allow all origins for now, restrict in production
+        methods: ["GET", "POST"]
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -110,7 +123,12 @@ async function getChatHistory(userId, limit = 50) {
 
 async function authenticateUser(req, res, next) {
     try {
-        const appwriteUserId = req.headers['x-user-id'];
+        let appwriteUserId = req.headers['x-user-id'];
+
+        // Fallback to query param for SSE
+        if (!appwriteUserId && req.query.userId) {
+            appwriteUserId = req.query.userId;
+        }
 
         if (!appwriteUserId) {
             return res.status(401).json({ error: "No user ID provided" });
@@ -134,6 +152,31 @@ async function authenticateUser(req, res, next) {
         return res.status(401).json({ error: "Authentication failed" });
     }
 }
+
+io.on("connection", (socket) => {
+    console.log("🔌 Socket.IO Client connected:", socket.id);
+
+    socket.on("authenticate", async ({ userId }) => {
+        // In a real app, verify token. For now, trust the userId.
+        socket.userId = userId;
+        socket.join(userId);
+        console.log(`👤 Socket authenticated for user: ${userId}`);
+    });
+
+    socket.on("disconnect", () => {
+        console.log("❌ Socket disconnected:", socket.id);
+    });
+
+    // Handle client decisions
+    socket.on("decision", (data) => {
+        // Forward decision to the running agent/process
+        // This will be handled by the agent runner logic
+        console.log("📝 Decision received:", data);
+        // We might need an event emitter to notify the waiting agent
+        // For simplicity, we can use a global event emitter or similar mechanism
+        // But since agents are running in the same process, we can use a shared state or event bus
+    });
+});
 
 // ==========================================
 // Routes
@@ -180,7 +223,11 @@ app.post("/api/chat", authenticateUser, async (req, res) => {
 
         console.log(`🧠 Processing message from ${req.user.name}: "${message}"`);
 
-        const result = await run(mathXAgent, message);
+        const messagetoagent = `Username: ${req.user.name}: "${message}",
+        User ID: ${req.user.supabaseId}`;
+
+        // Use InitAgent to decide flow
+        const result = await run(initAgent, messagetoagent);
 
         const agentMessage = await saveChatMessage(
             req.user.supabaseId,
@@ -212,6 +259,28 @@ app.get("/api/chat/history", authenticateUser, async (req, res) => {
     }
 });
 
+// New Endpoint for Ingest Start
+app.post("/api/ingest/start", authenticateUser, async (req, res) => {
+    // This endpoint might be called by the frontend after the modal is open
+    // or by the chat agent.
+    // For the flow: Chat -> InitAgent -> SSE -> Modal Open -> User Uploads PDF -> POST /api/ingest/start
+
+    const { fileUrl, contestHint } = req.body;
+    const userId = req.user.appwriteId;
+
+    console.log(`🚀 Starting ingest for ${userId}, file: ${fileUrl}`);
+
+    // Start the QuestionUploadAgent in background
+    // We need a way to run it and pass the socket/SSE context
+
+    // Mocking the start
+    res.json({ success: true, message: "Ingestion started" });
+
+    // Trigger background process (TODO: Implement actual agent run)
+    // runQuestionUploadAgent(userId, fileUrl, contestHint, io);
+});
+
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error("Unhandled error:", err);
@@ -219,7 +288,10 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
 });
+
+// Export for use in agents
+export { io };
