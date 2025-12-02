@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { LogOut, Send, Bot, User, Loader2, Sparkles, Mic, MicOff } from 'lucide-react';
+import { LogOut, Send, Bot, User, Loader2, Sparkles, Mic, MicOff, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useSpeechToText } from '../hooks/useSpeechToText';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import { io } from 'socket.io-client';
+import QuestionUploadModal from '../components/QuestionUploadModal';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
 
 export default function Chat() {
     const { user, logout } = useAuth();
@@ -16,7 +19,54 @@ export default function Chat() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(true);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [attachment, setAttachment] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
     const messagesEndRef = useRef(null);
+    const socketRef = useRef(null);
+
+    const handleFileSelect = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.type !== 'application/pdf') {
+            alert('Only PDF files are allowed');
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+
+            const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+            const response = await fetch(
+                `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+                {
+                    method: 'POST',
+                    body: formData,
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error('Upload failed');
+            }
+
+            const data = await response.json();
+            setAttachment({
+                name: file.name,
+                url: data.secure_url
+            });
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Failed to upload file');
+        } finally {
+            setIsUploading(false);
+            // Reset input
+            e.target.value = '';
+        }
+    };
 
     // Speech to Text Hook
     const { isListening, transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechToText();
@@ -25,38 +75,58 @@ export default function Chat() {
     useEffect(() => {
         if (transcript) {
             setInput((prev) => {
-                // If the transcript is just appending to existing text, handle it gracefully
-                // For simplicity, we'll just append the new transcript part if it's not already there
-                // But since our hook appends to its own transcript state, we might just want to 
-                // replace the input or append carefully.
-                // Let's try appending the *new* part. 
-                // Actually, a simpler way for this MVP is to just set the input to the transcript
-                // if the input was empty, or append if not.
-                // However, the hook accumulates 'transcript'. 
-                // Let's just set input to transcript for now to avoid duplication issues 
-                // if the user types while speaking.
-                // Better UX: Append transcript to current input, but we need to manage the diff.
-                // Simplest robust UX: 
-                // When listening starts, we can clear transcript. 
-                // Then we append `transcript` to `input`.
-                // But `transcript` keeps growing. 
-                // Let's just use the transcript as the source of truth while listening?
-                // No, user might type.
-
-                // Let's just append the *latest* transcript. 
-                // Actually, let's change the strategy: 
-                // When speech ends (isListening becomes false), we append the final transcript to input.
-                // But we want real-time feedback.
-
-                // Let's try this: 
-                // We will use a ref or just simple logic: 
-                // We'll append the *difference* or just let the user see the transcript building up.
                 return prev + (prev.endsWith(' ') ? '' : ' ') + transcript.trim();
             });
-            // Clear transcript from hook so it doesn't get re-appended
             resetTranscript();
         }
     }, [transcript, resetTranscript]);
+
+    // Socket.IO Connection
+    useEffect(() => {
+        if (!user) return;
+
+        socketRef.current = io(BACKEND_URL);
+
+        socketRef.current.on('connect', () => {
+            console.log('🔌 Socket Connected');
+            socketRef.current.emit('authenticate', { userId: user.$id });
+        });
+
+        socketRef.current.on('agent_response', (data) => {
+            setLoading(false);
+            if (data.error) {
+                const errorMessage = {
+                    id: Date.now(),
+                    text: `❌ Error: ${data.error}`,
+                    sender: 'agent',
+                    timestamp: new Date().toISOString(),
+                };
+                setMessages((prev) => [...prev, errorMessage]);
+            } else if (data.text) {
+                const agentMessage = {
+                    id: Date.now(),
+                    text: data.text,
+                    sender: 'agent',
+                    timestamp: new Date().toISOString(),
+                };
+                setMessages((prev) => [...prev, agentMessage]);
+            }
+        });
+
+        socketRef.current.on('agent_response_mode', (data) => {
+            console.log('🔔 Response Mode:', data.mode);
+            if (data.mode === 'modal') {
+                setIsUploadModalOpen(true);
+                setLoading(false); // Stop loading indicator as modal takes over
+            }
+        });
+
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+            }
+        };
+    }, [user]);
 
     useEffect(() => {
         loadChatHistory();
@@ -101,40 +171,28 @@ export default function Chat() {
     };
 
     const handleSend = async () => {
-        if (!input.trim() || loading) return;
+        if ((!input.trim() && !attachment) || loading) return;
 
         const userMessage = {
             id: Date.now(),
             text: input,
             sender: 'user',
             timestamp: new Date().toISOString(),
+            docsrefs: attachment ? [attachment.url] : []
         };
 
         setMessages((prev) => [...prev, userMessage]);
         setInput('');
+        setAttachment(null);
         setLoading(true);
 
-        try {
-            const response = await api.sendMessage(userMessage.text);
-
-            const agentMessage = {
-                id: response.messageId,
-                text: response.response,
-                sender: 'agent',
-                timestamp: response.timestamp,
-            };
-
-            setMessages((prev) => [...prev, agentMessage]);
-        } catch (error) {
-            console.error('Failed to send message:', error);
-            const errorMessage = {
-                id: Date.now() + 1,
-                text: '❌ Failed to send message. Please try again.',
-                sender: 'agent',
-                timestamp: new Date().toISOString(),
-            };
-            setMessages((prev) => [...prev, errorMessage]);
-        } finally {
+        if (socketRef.current) {
+            socketRef.current.emit('user_message', {
+                message: userMessage.text,
+                docsrefs: userMessage.docsrefs
+            });
+        } else {
+            console.error('Socket not connected');
             setLoading(false);
         }
     };
@@ -246,7 +304,7 @@ export default function Chat() {
                                                     rehypePlugins={[rehypeKatex]}
                                                 >
                                                     {message.text}
-                                            </ReactMarkdown>
+                                                </ReactMarkdown>
 
                                             </div>
                                         ) : (
@@ -302,13 +360,59 @@ export default function Chat() {
                             style={{ minHeight: '48px', maxHeight: '120px' }}
                         />
 
+                        {/* Attachment Button */}
+                        <div className="relative">
+                            <input
+                                type="file"
+                                id="file-upload"
+                                className="hidden"
+                                onChange={handleFileSelect}
+                                accept=".pdf"
+                                disabled={loading || isUploading}
+                            />
+                            <label
+                                htmlFor="file-upload"
+                                className={`p-3 rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer ${attachment
+                                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-700'
+                                    }`}
+                                title="Attach PDF"
+                            >
+                                {isUploading ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    <Paperclip className="w-5 h-5" />
+                                )}
+                            </label>
+                            {attachment && (
+                                <div className="absolute bottom-full mb-2 left-0 bg-slate-800 border border-slate-700 rounded-lg p-2 flex items-center gap-2 min-w-[200px] shadow-xl">
+                                    <div className="w-8 h-8 bg-red-500/20 rounded flex items-center justify-center">
+                                        <span className="text-xs font-bold text-red-400">PDF</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs text-white truncate">{attachment.name}</p>
+                                        <p className="text-[10px] text-slate-400">Ready to send</p>
+                                    </div>
+                                    <button
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            setAttachment(null);
+                                        }}
+                                        className="p-1 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
                         {/* Microphone Button */}
                         {hasSupport && (
                             <button
                                 onClick={toggleListening}
                                 className={`p-3 rounded-xl transition-all duration-200 flex items-center justify-center ${isListening
-                                        ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 animate-pulse'
-                                        : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-700'
+                                    ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 animate-pulse'
+                                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-700'
                                     }`}
                                 title={isListening ? "Stop listening" : "Start voice input"}
                             >
@@ -318,7 +422,7 @@ export default function Chat() {
 
                         <button
                             onClick={handleSend}
-                            disabled={!input.trim() || loading}
+                            disabled={(!input.trim() && !attachment) || loading || isUploading}
                             className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-xl font-semibold text-white transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2 shadow-lg shadow-cyan-500/30 h-[48px]"
                         >
                             <Send className="w-5 h-5" />
@@ -332,6 +436,12 @@ export default function Chat() {
                     )}
                 </div>
             </div>
+
+            <QuestionUploadModal
+                isOpen={isUploadModalOpen}
+                onClose={() => setIsUploadModalOpen(false)}
+                socket={socketRef.current}
+            />
         </div>
     );
 }

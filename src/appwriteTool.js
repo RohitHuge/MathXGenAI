@@ -65,9 +65,9 @@ export const createContestTool = tool({
   description: "Creates a new contest in Appwrite.",
   parameters: z.object({
     title: z.string(),
-    description: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
+    description: z.string().describe("Description of the contest"),
+    startDate: z.string().describe("Start date (ISO string)"),
+    endDate: z.string().describe("End date (ISO string)"),
   }),
   async execute({ title, description, startDate, endDate }) {
     try {

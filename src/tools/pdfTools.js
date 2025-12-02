@@ -2,7 +2,12 @@ import { tool } from "@openai/agents";
 import { z } from "zod";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
-const pdf = require("pdf-parse");
+const pdfLib = require("pdf-parse");
+console.log("DEBUG: pdfLib type:", typeof pdfLib);
+console.log("DEBUG: pdfLib keys:", Object.keys(pdfLib));
+console.log("DEBUG: pdfLib:", pdfLib);
+const pdf = pdfLib.default || pdfLib;
+console.log("DEBUG: pdf type:", typeof pdf);
 import fs from "fs";
 import https from "https";
 

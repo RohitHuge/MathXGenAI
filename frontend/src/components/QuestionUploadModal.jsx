@@ -1,12 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-
-export default function QuestionUploadModal({ isOpen, onClose }) {
+export default function QuestionUploadModal({ isOpen, onClose, socket }) {
     const { user } = useAuth();
-    const [socket, setSocket] = useState(null);
     const [step, setStep] = useState('upload'); // upload, processing, approval, done
     const [progress, setProgress] = useState({ phase: '', percent: 0, detail: '' });
     const [currentQuestion, setCurrentQuestion] = useState(null);
@@ -15,91 +11,60 @@ export default function QuestionUploadModal({ isOpen, onClose }) {
     const [contestHint, setContestHint] = useState('');
 
     useEffect(() => {
-        if (isOpen && user) {
-            const newSocket = io(BACKEND_URL);
-            setSocket(newSocket);
-
-            newSocket.on('connect', () => {
-                console.log('Connected to Socket.IO');
-                newSocket.emit('authenticate', { userId: user.$id });
-            });
-
-            newSocket.on('progress', (data) => {
+        if (isOpen && socket) {
+            const onProgress = (data) => {
                 setStep('processing');
                 setProgress(data);
-            });
+            };
 
-            newSocket.on('approval_needed', (data) => {
+            const onApprovalNeeded = (data) => {
                 setStep('approval');
                 setCurrentQuestion(data);
-            });
+            };
 
-            newSocket.on('done', (data) => {
+            const onDone = (data) => {
                 setStep('done');
                 setSummary(data.summary);
-            });
+            };
 
-            return () => newSocket.disconnect();
+            socket.on('progress', onProgress);
+            socket.on('approval_needed', onApprovalNeeded);
+            socket.on('done', onDone);
+
+            return () => {
+                socket.off('progress', onProgress);
+                socket.off('approval_needed', onApprovalNeeded);
+                socket.off('done', onDone);
+            };
         }
-    }, [isOpen, user]);
+    }, [isOpen, socket]);
 
     const handleStartUpload = async () => {
-        if (!file) return;
+        if (!file || !socket) return;
 
-        // In a real app, upload to storage (Appwrite/S3) first, get URL.
-        // For this demo, we'll assume the file is accessible or send it as base64/buffer?
-        // Sending large files over JSON/Socket is bad. 
-        // Let's assume we upload to a temp endpoint or just pass a mock URL if we can't implement full file upload now.
-        // Or we can use a simple FormData upload to the backend first.
+        // Mock URL for demo purposes since we don't have a file upload endpoint
+        const mockUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
 
-        // Since we didn't implement a file upload endpoint in server.js (only /api/ingest/start which takes fileUrl),
-        // we should probably mock the file URL or implement a simple upload.
-        // For the sake of the "Agentic" demo, let's assume the file is uploaded and we get a URL.
-        // We will mock it as a local path or a dummy URL for the tool to pick up (if the tool supports it).
-        // The pdf_ingest tool supports http.
+        // In a real app, we would upload the file here and get the URL.
+        console.log("Simulating upload for:", file.name);
 
-        // Let's just send a dummy URL for now to trigger the flow, 
-        // or if the user actually selects a file, we might need to upload it.
-        // Given the complexity, let's just send the file name and pretend.
-        // But wait, the tool needs to read it.
+        // Send message to agent to start ingestion
+        const message = `I have uploaded a PDF file. URL: ${mockUrl}. Contest Hint: ${contestHint}`;
+        socket.emit('user_message', { message });
 
-        // TODO: Implement actual file upload. For now, we'll use a hardcoded sample URL if no file upload logic exists.
-        // Or better, let's just pass the file object to a helper that "uploads" it.
-
-        const mockUrl = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"; // Sample PDF
-
-        // Call the start endpoint
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/ingest/start`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-user-id': user.$id
-                },
-                body: JSON.stringify({
-                    fileUrl: mockUrl, // Using mock URL for demo
-                    contestHint
-                })
-            });
-
-            if (response.ok) {
-                setStep('processing');
-            }
-        } catch (err) {
-            console.error("Failed to start ingest", err);
-        }
+        setStep('processing');
+        setProgress({ phase: 'Starting...', percent: 0, detail: 'Agent is analyzing your request...' });
     };
 
     const handleDecision = (decision, editedQuestion = null) => {
         if (socket && currentQuestion) {
-            socket.emit('decision', {
-                runId: currentQuestion.runId,
-                index: currentQuestion.index,
-                decision,
-                editedQuestion
-            });
-            setCurrentQuestion(null); // Clear current question while waiting for next
-            setStep('processing'); // Go back to processing/waiting
+            // Send decision as a message to the agent
+            const message = `Decision for Question ${currentQuestion.index}: ${decision}`;
+            socket.emit('user_message', { message });
+
+            setCurrentQuestion(null);
+            setStep('processing');
+            setProgress({ phase: 'Processing decision...', percent: 0, detail: 'Agent is updating...' });
         }
     };
 
@@ -121,7 +86,7 @@ export default function QuestionUploadModal({ isOpen, onClose }) {
                                 type="text"
                                 value={contestHint}
                                 onChange={(e) => setContestHint(e.target.value)}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600"
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-3 py-2"
                                 placeholder="e.g. Weekly Contest 5"
                             />
                         </div>
@@ -160,13 +125,12 @@ export default function QuestionUploadModal({ isOpen, onClose }) {
                     <div className="space-y-4">
                         <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md">
                             <h3 className="font-medium text-gray-900 dark:text-white mb-2">Question {currentQuestion.index}</h3>
-                            <div className="prose dark:prose-invert max-w-none">
+                            <div className="prose dark:prose-invert max-w-none text-gray-800 dark:text-gray-200">
                                 <p>{currentQuestion.question.body}</p>
-                                {/* Render LaTeX here if needed */}
                             </div>
                             <div className="mt-4 grid grid-cols-2 gap-2">
                                 {currentQuestion.question.choices?.map((choice, i) => (
-                                    <div key={i} className={`p-2 rounded border ${choice === currentQuestion.question.answer ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-200'}`}>
+                                    <div key={i} className={`p-2 rounded border ${choice === currentQuestion.question.answer ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200'}`}>
                                         {choice}
                                     </div>
                                 ))}

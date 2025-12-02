@@ -5,21 +5,15 @@ import { createClient } from "@supabase/supabase-js";
 import { run } from "@openai/agents";
 import { mathXAgent } from "./agent.js";
 import { createServer } from "http";
-import { Server } from "socket.io";
 import { initAgent } from "./src/agents/initAgent.js";
 import { questionUploadAgent } from "./src/agents/questionUploadAgent.js";
-import { addSSEClient, removeSSEClient } from "./src/utils/sse.js";
+import { initSocket } from "./src/socketManager.js";
 
 dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer, {
-    cors: {
-        origin: "*", // Allow all origins for now, restrict in production
-        methods: ["GET", "POST"]
-    }
-});
+const io = initSocket(httpServer);
 
 const PORT = process.env.PORT || 3000;
 
@@ -79,7 +73,7 @@ async function getSupabaseUserByAppwriteId(appwriteUserId) {
     }
 }
 
-async function saveChatMessage(userId, message, isUserMessage, response = null) {
+async function saveChatMessage(userId, message, isUserMessage, response = null, docsRefs = []) {
     try {
         const { data, error } = await supabase
             .from("chat_messages")
@@ -88,6 +82,7 @@ async function saveChatMessage(userId, message, isUserMessage, response = null) 
                 message: message,
                 response: response,
                 is_user_message: isUserMessage,
+                docs_refs: docsRefs
             })
             .select()
             .single();
@@ -125,11 +120,6 @@ async function authenticateUser(req, res, next) {
     try {
         let appwriteUserId = req.headers['x-user-id'];
 
-        // Fallback to query param for SSE
-        if (!appwriteUserId && req.query.userId) {
-            appwriteUserId = req.query.userId;
-        }
-
         if (!appwriteUserId) {
             return res.status(401).json({ error: "No user ID provided" });
         }
@@ -153,28 +143,89 @@ async function authenticateUser(req, res, next) {
     }
 }
 
+// ==========================================
+// Socket.IO Agent Orchestration
+// ==========================================
+
 io.on("connection", (socket) => {
-    console.log("🔌 Socket.IO Client connected:", socket.id);
+    // Note: 'authenticate' is handled in socketManager, but we can listen here too if needed.
+    // We assume the client emits 'user_message' after authentication.
 
-    socket.on("authenticate", async ({ userId }) => {
-        // In a real app, verify token. For now, trust the userId.
-        socket.userId = userId;
-        socket.join(userId);
-        console.log(`👤 Socket authenticated for user: ${userId}`);
-    });
+    socket.on("user_message", async ({ message, docsrefs = [] }) => {
+        try {
+            if (!socket.userId) {
+                socket.emit("agent_response", { error: "Not authenticated" });
+                return;
+            }
 
-    socket.on("disconnect", () => {
-        console.log("❌ Socket disconnected:", socket.id);
-    });
+            console.log(`📩 Message from ${socket.userId}: ${message}`);
+            if (docsrefs.length > 0) {
+                console.log(`📎 Attachments: ${docsrefs.join(", ")}`);
+            }
 
-    // Handle client decisions
-    socket.on("decision", (data) => {
-        // Forward decision to the running agent/process
-        // This will be handled by the agent runner logic
-        console.log("📝 Decision received:", data);
-        // We might need an event emitter to notify the waiting agent
-        // For simplicity, we can use a global event emitter or similar mechanism
-        // But since agents are running in the same process, we can use a shared state or event bus
+            // 1. Save User Message
+            const supabaseUser = await getSupabaseUserByAppwriteId(socket.userId);
+            if (supabaseUser) {
+                await saveChatMessage(supabaseUser.id, message, true, null, docsrefs);
+            }
+
+            // 2. Prepare Context with History
+            const history = await getChatHistory(supabaseUser.id, 10);
+            const historyText = history.map(msg => {
+                const role = msg.is_user_message ? "User" : "Agent";
+                const content = msg.is_user_message ? msg.message : msg.response;
+                const docs = msg.docs_refs && msg.docs_refs.length > 0 ? ` [Attachments: ${msg.docs_refs.join(", ")}]` : "";
+                return `${role}: ${content}${docs}`;
+            }).join("\n");
+
+            let contextMessage = `
+Current User ID: ${socket.userId}
+Chat History:
+${historyText}
+
+User: ${message}
+            `.trim();
+
+            if (docsrefs.length > 0) {
+                contextMessage += `\nUser attached documents: ${JSON.stringify(docsrefs)}`;
+            }
+
+            console.log("🤖 Running Init Agent...");
+            const initResult = await run(initAgent, contextMessage);
+            const decision = initResult.finalOutput.trim();
+
+            console.log(`👉 Init Agent Decision: ${decision}`);
+
+            let finalResponse = "";
+            let activeAgent = null;
+
+            // 3. Handoff & Execute Specialist
+            if (decision.includes("HANDOFF_TO_UPLOAD")) {
+                activeAgent = questionUploadAgent;
+            } else if (decision.includes("HANDOFF_TO_INSIGHT")) {
+                activeAgent = mathXAgent;
+            } else {
+                // Fallback: Init Agent answered directly
+                finalResponse = decision;
+            }
+
+            if (activeAgent) {
+                console.log(`🚀 Handing off to ${activeAgent.name}...`);
+                const result = await run(activeAgent, contextMessage); // Run specialist with full context
+                finalResponse = result.finalOutput;
+            }
+
+            // 4. Send Response & Save
+            socket.emit("agent_response", { text: finalResponse });
+
+            if (supabaseUser) {
+                await saveChatMessage(supabaseUser.id, message, false, finalResponse);
+            }
+
+        } catch (error) {
+            console.error("Error in agent flow:", error);
+            socket.emit("agent_response", { error: "An error occurred processing your request." });
+        }
     });
 });
 
@@ -211,42 +262,6 @@ app.post("/api/auth/sync", async (req, res) => {
     }
 });
 
-app.post("/api/chat", authenticateUser, async (req, res) => {
-    try {
-        const { message } = req.body;
-
-        if (!message || typeof message !== "string") {
-            return res.status(400).json({ error: "Message is required" });
-        }
-
-        await saveChatMessage(req.user.supabaseId, message, true);
-
-        console.log(`🧠 Processing message from ${req.user.name}: "${message}"`);
-
-        const messagetoagent = `Username: ${req.user.name}: "${message}",
-        User ID: ${req.user.supabaseId}`;
-
-        // Use InitAgent to decide flow
-        const result = await run(initAgent, messagetoagent);
-
-        const agentMessage = await saveChatMessage(
-            req.user.supabaseId,
-            message,
-            false,
-            result.finalOutput
-        );
-
-        res.json({
-            response: result.finalOutput,
-            messageId: agentMessage.id,
-            timestamp: agentMessage.created_at,
-        });
-    } catch (error) {
-        console.error("Chat error:", error);
-        res.status(500).json({ error: "Failed to process message" });
-    }
-});
-
 app.get("/api/chat/history", authenticateUser, async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 50;
@@ -259,28 +274,6 @@ app.get("/api/chat/history", authenticateUser, async (req, res) => {
     }
 });
 
-// New Endpoint for Ingest Start
-app.post("/api/ingest/start", authenticateUser, async (req, res) => {
-    // This endpoint might be called by the frontend after the modal is open
-    // or by the chat agent.
-    // For the flow: Chat -> InitAgent -> SSE -> Modal Open -> User Uploads PDF -> POST /api/ingest/start
-
-    const { fileUrl, contestHint } = req.body;
-    const userId = req.user.appwriteId;
-
-    console.log(`🚀 Starting ingest for ${userId}, file: ${fileUrl}`);
-
-    // Start the QuestionUploadAgent in background
-    // We need a way to run it and pass the socket/SSE context
-
-    // Mocking the start
-    res.json({ success: true, message: "Ingestion started" });
-
-    // Trigger background process (TODO: Implement actual agent run)
-    // runQuestionUploadAgent(userId, fileUrl, contestHint, io);
-});
-
-
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error("Unhandled error:", err);
@@ -292,6 +285,3 @@ httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
 });
-
-// Export for use in agents
-export { io };

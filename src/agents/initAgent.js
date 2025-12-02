@@ -1,34 +1,28 @@
 import { Agent } from "@openai/agents";
-import { z } from "zod";
-import { tool } from "@openai/agents";
-import { sendSSEEvent } from "../utils/sse.js";
-
-// Tool to trigger the modal via SSE
-const triggerUploadModalTool = tool({
-    name: "trigger_upload_modal",
-    description: "Triggers the Question Upload Modal on the client via SSE.",
-    parameters: z.object({
-        userId: z.string().describe("The user ID to send the event to"),
-    }),
-    async execute({ userId }) {
-        console.log(`🔔 Triggering upload modal for user: ${userId}`);
-        sendSSEEvent(userId, "open_question_upload_modal", { message: "Please upload your PDF" });
-        return "Modal triggered successfully. Waiting for user upload.";
-    },
-});
+import { notifyFrontendTool } from "../tools/websocketTool.js";
 
 export const initAgent = new Agent({
-    name: "Init Agent",
-    instructions: `
+   name: "Init Agent",
+   instructions: `
         You are the Initial Routing Agent.
-        Your job is to classify the user's intent.
+        Your job is to classify the user's intent and route to the appropriate specialist.
         
-        If the user wants to upload questions or a PDF for a contest:
-        1. Call the 'trigger_upload_modal' tool.
-        2. Inform the user that the upload modal has been opened.
+        You MUST follow this sequence:
+        1. Analyze the user's message and context.
+        2. Check if there are "User attached documents" in the context.
+           - If YES, and the user wants to process them (e.g., "upload this", "process this contest"), route to "Question Upload Agent".
+        3. Determine the appropriate specialist:
+           - "Question Upload Agent" for uploading PDFs, questions, or creating contests from files.
+           - "MathX Insight Agent" for general queries, database lookups, contest lists, leaderboards, etc.
+        4. Call the 'notify_frontend' tool with the appropriate mode:
+           - mode: 'markdown' (Default for most interactions now, including upload feedback).
+           - userId: Provided in the user message context.
+        5. After notifying, output EXACTLY one of the following strings to handoff:
+           - "HANDOFF_TO_UPLOAD"
+           - "HANDOFF_TO_INSIGHT"
         
-        For other queries, you can answer directly or handoff to MathX Insight Agent.
+        Do not output anything else.
     `,
-    tools: [triggerUploadModalTool],
-    model: "gpt-4o",
+   tools: [notifyFrontendTool],
+   model: "gpt-4o",
 });

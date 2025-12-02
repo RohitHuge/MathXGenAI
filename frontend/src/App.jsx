@@ -12,31 +12,8 @@ function AppContent() {
   const { user } = useAuth();
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
+  // SSE logic removed
 
-    // Connect to SSE
-    const url = `${BACKEND_URL}/api/events?userId=${user.$id}`;
-    const eventSource = new EventSource(url);
-
-    eventSource.onopen = () => {
-      console.log("📡 SSE Connected");
-    };
-
-    eventSource.addEventListener("open_question_upload_modal", (event) => {
-      console.log("🔔 Received open_question_upload_modal event");
-      setIsUploadModalOpen(true);
-    });
-
-    eventSource.onerror = (err) => {
-      console.error("SSE Error:", err);
-      eventSource.close();
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, [user]);
 
   return (
     <>
