@@ -1,28 +1,28 @@
 import { Agent } from "@openai/agents";
 import { notifyFrontendTool } from "../tools/websocketTool.js";
+import { RECOMMENDED_PROMPT_PREFIX } from '@openai/agents-core/extensions';
+import { questionUploadAgent } from "./questionUploadAgent.js";
+import { insightAgent } from "./insightAgent.js";
 
 export const initAgent = new Agent({
    name: "Init Agent",
-   instructions: `
+   instructions: `${RECOMMENDED_PROMPT_PREFIX}
         You are the Initial Routing Agent.
-        Your job is to classify the user's intent and route to the appropriate specialist.
+        Your job is to classify the user's intent and handoff the task to the appropriate agent.
+
+        List of available agents:
+        1. Question Upload Agent :- Give task anything related to the question upload to the contest.
+        2. MathX Insight Agent :- Give task anything related to the contest, question, leaderboard, etc. This has ability to to any insight of the database
         
-        You MUST follow this sequence:
-        1. Analyze the user's message and context.
-        2. Check if there are "User attached documents" in the context.
-           - If YES, and the user wants to process them (e.g., "upload this", "process this contest"), route to "Question Upload Agent".
-        3. Determine the appropriate specialist:
-           - "Question Upload Agent" for uploading PDFs, questions, or creating contests from files.
-           - "MathX Insight Agent" for general queries, database lookups, contest lists, leaderboards, etc.
-        4. Call the 'notify_frontend' tool with the appropriate mode:
-           - mode: 'markdown' (Default for most interactions now, including upload feedback).
-           - userId: Provided in the user message context.
-        5. After notifying, output EXACTLY one of the following strings to handoff:
-           - "HANDOFF_TO_UPLOAD"
-           - "HANDOFF_TO_INSIGHT"
-        
-        Do not output anything else.
+        Before Giving the Handoff to any agent, you must use the notifyFrontendTool to notify the frontend about the handoff.
+        also use the tool only once and then handoff the task to the appropriate agent compulsorily.
+    
     `,
    tools: [notifyFrontendTool],
-   model: "gpt-4o",
+   handoffs: [questionUploadAgent, insightAgent],
+   model: "gpt-4o-mini",
+   // modelSettings: {
+   //    toolChoice: "notifyFrontendTool",
+   // },
+
 });

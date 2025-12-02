@@ -3,10 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { run } from "@openai/agents";
-import { mathXAgent } from "./agent.js";
 import { createServer } from "http";
 import { initAgent } from "./src/agents/initAgent.js";
-import { questionUploadAgent } from "./src/agents/questionUploadAgent.js";
 import { initSocket } from "./src/socketManager.js";
 
 dotenv.config();
@@ -147,6 +145,7 @@ async function authenticateUser(req, res, next) {
 // Socket.IO Agent Orchestration
 // ==========================================
 
+/*
 io.on("connection", (socket) => {
     // Note: 'authenticate' is handled in socketManager, but we can listen here too if needed.
     // We assume the client emits 'user_message' after authentication.
@@ -179,11 +178,11 @@ io.on("connection", (socket) => {
             }).join("\n");
 
             let contextMessage = `
-Current User ID: ${socket.userId}
-Chat History:
-${historyText}
+                    Current User ID: ${socket.userId}
+                    Chat History:
+                    ${historyText}
 
-User: ${message}
+                    User: ${message}
             `.trim();
 
             if (docsrefs.length > 0) {
@@ -191,35 +190,13 @@ User: ${message}
             }
 
             console.log("🤖 Running Init Agent...");
-            const initResult = await run(initAgent, contextMessage);
-            const decision = initResult.finalOutput.trim();
-
-            console.log(`👉 Init Agent Decision: ${decision}`);
-
-            let finalResponse = "";
-            let activeAgent = null;
-
-            // 3. Handoff & Execute Specialist
-            if (decision.includes("HANDOFF_TO_UPLOAD")) {
-                activeAgent = questionUploadAgent;
-            } else if (decision.includes("HANDOFF_TO_INSIGHT")) {
-                activeAgent = mathXAgent;
-            } else {
-                // Fallback: Init Agent answered directly
-                finalResponse = decision;
-            }
-
-            if (activeAgent) {
-                console.log(`🚀 Handing off to ${activeAgent.name}...`);
-                const result = await run(activeAgent, contextMessage); // Run specialist with full context
-                finalResponse = result.finalOutput;
-            }
+            const result = await run(initAgent, contextMessage);
 
             // 4. Send Response & Save
-            socket.emit("agent_response", { text: finalResponse });
+            socket.emit("agent_response", { text: result.finalOutput });
 
             if (supabaseUser) {
-                await saveChatMessage(supabaseUser.id, message, false, finalResponse);
+                await saveChatMessage(supabaseUser.id, message, false, result.finalOutput);
             }
 
         } catch (error) {
@@ -228,6 +205,7 @@ User: ${message}
         }
     });
 });
+*/
 
 // ==========================================
 // Routes
@@ -235,6 +213,79 @@ User: ${message}
 
 app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+import { upload, cloudinary } from "./src/uploadConfig.js";
+
+app.post("/api/chat/upload", authenticateUser, upload.single("file"), async (req, res) => {
+    try {
+        const { message, contestHint } = req.body;
+        const file = req.file;
+        let fileUrl = null;
+
+        console.log(`📩 Upload Request from ${req.user.name}`);
+        console.log(`📝 Message: ${message}`);
+        console.log(`📎 File: ${file ? file.originalname : "None"}`);
+
+        // 1. Upload to Cloudinary if file exists
+        if (file) {
+            try {
+                // Upload from buffer
+                const b64 = Buffer.from(file.buffer).toString("base64");
+                let dataURI = "data:" + file.mimetype + ";base64," + b64;
+
+                const uploadRes = await cloudinary.uploader.upload(dataURI, {
+                    resource_type: "auto",
+                    folder: "mathx_uploads"
+                });
+
+                fileUrl = uploadRes.secure_url;
+                console.log(`✅ File uploaded to Cloudinary: ${fileUrl}`);
+            } catch (uploadErr) {
+                console.error("Cloudinary Upload Error:", uploadErr);
+                return res.status(500).json({ error: "File upload failed" });
+            }
+        }
+
+        // 2. Save User Message
+        const docsRefs = fileUrl ? [fileUrl] : [];
+        await saveChatMessage(req.user.supabaseId, message, true, null, docsRefs);
+
+        // 3. Prepare Context for Agent
+        // We can reuse getChatHistory logic or just send current context
+        // For now, let's keep it simple and focused on the current request + file
+        let contextMessage = `
+            User ID: ${req.user.appwriteId}
+            User Name: ${req.user.name}
+            Message: ${message}
+            Contest Context: ${contestHint || "None"}
+        `.trim();
+
+        if (fileUrl) {
+            contextMessage += `\n\n[SYSTEM] The user has uploaded a file. URL: ${fileUrl}`;
+        }
+
+        console.log("🤖 Running Agent...");
+        const result = await run(initAgent, contextMessage);
+
+        // 4. Save Agent Response
+        const agentMessage = await saveChatMessage(
+            req.user.supabaseId,
+            message,
+            false,
+            result.finalOutput
+        );
+
+        res.json({
+            response: result.finalOutput,
+            messageId: agentMessage.id,
+            fileUrl: fileUrl
+        });
+
+    } catch (error) {
+        console.error("Chat/Upload Error:", error);
+        res.status(500).json({ error: "Failed to process request" });
+    }
 });
 
 app.post("/api/auth/sync", async (req, res) => {

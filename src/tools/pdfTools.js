@@ -1,13 +1,6 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfLib = require("pdf-parse");
-console.log("DEBUG: pdfLib type:", typeof pdfLib);
-console.log("DEBUG: pdfLib keys:", Object.keys(pdfLib));
-console.log("DEBUG: pdfLib:", pdfLib);
-const pdf = pdfLib.default || pdfLib;
-console.log("DEBUG: pdf type:", typeof pdf);
+import { PDFParse } from 'pdf-parse';
 import fs from "fs";
 import https from "https";
 
@@ -31,15 +24,18 @@ export const pdfIngestTool = tool({
     async execute({ fileUrl }) {
         try {
             console.log(`📄 Ingesting PDF from: ${fileUrl}`);
-            let dataBuffer;
+            // let dataBuffer;
 
-            if (fileUrl.startsWith("http")) {
-                dataBuffer = await fetchPdfBuffer(fileUrl);
-            } else {
-                dataBuffer = fs.readFileSync(fileUrl);
-            }
+            // if (fileUrl.startsWith("http")) {
+            //     dataBuffer = await fetchPdfBuffer(fileUrl);
+            // } else {
+            //     dataBuffer = fs.readFileSync(fileUrl);
+            // }
+            const pdfData = new PDFParse({url: `${fileUrl}`});
 
-            const data = await pdf(dataBuffer);
+            const data = await pdfData.getText();
+
+            console.log(data);
 
             // Basic page splitting (pdf-parse returns full text, but also has info. 
             // For strict page-by-page, we might need pdf-lib or just split by form feed if present, 

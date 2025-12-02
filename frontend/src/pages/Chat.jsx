@@ -24,7 +24,7 @@ export default function Chat() {
     const [isUploading, setIsUploading] = useState(false);
     const messagesEndRef = useRef(null);
     const socketRef = useRef(null);
-
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
     const handleFileSelect = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -36,27 +36,27 @@ export default function Chat() {
 
         setIsUploading(true);
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+            // const formData = new FormData();
+            // formData.append('file', file);
+            // formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
 
-            const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-            const response = await fetch(
-                `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
-                {
-                    method: 'POST',
-                    body: formData,
-                }
-            );
+            // const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+            // const response = await fetch(
+            //     `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+            //     {
+            //         method: 'POST',
+            //         body: formData,
+            //     }
+            // );
 
-            if (!response.ok) {
-                throw new Error('Upload failed');
-            }
+            // if (!response.ok) {
+            //     throw new Error('Upload failed');
+            // }
 
-            const data = await response.json();
+            // const data = await response.json();
             setAttachment({
                 name: file.name,
-                url: data.secure_url
+                file : file
             });
         } catch (error) {
             console.error('Upload error:', error);
@@ -186,13 +186,43 @@ export default function Chat() {
         setAttachment(null);
         setLoading(true);
 
-        if (socketRef.current) {
-            socketRef.current.emit('user_message', {
-                message: userMessage.text,
-                docsrefs: userMessage.docsrefs
+        // if (socketRef.current) {
+        //     socketRef.current.emit('user_message', {
+        //         message: userMessage.text,
+        //         docsrefs: userMessage.docsrefs
+        //     });
+        // } else {
+        //     console.error('Socket not connected');
+        //     setLoading(false);
+        // }
+        const formdata = new FormData();
+        formdata.append('message', userMessage.text);
+        formdata.append('file', attachment.file);
+        try {
+           const res = await fetch(`${backendUrl}/api/chat/upload`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-ID': user.$id
+                },
+                body: formdata
             });
-        } else {
-            console.error('Socket not connected');
+
+            if (!res.ok) {
+                throw new Error('Failed to send message');
+            }
+            const data = await res.json();
+            console.log(data);
+            setLoading(false);
+            const agentMessage = {
+                id: Date.now(),
+                text: data.text,
+                sender: 'agent',
+                timestamp: new Date().toISOString(),
+            };
+            setMessages((prev) => [...prev, agentMessage]);
+        } catch (error) {
+            console.error('Failed to send message:', error);
             setLoading(false);
         }
     };

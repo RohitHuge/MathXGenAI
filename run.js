@@ -1,5 +1,5 @@
 import { run } from "@openai/agents";
-import { mathXAgent } from "./agent.js";
+import { initAgent } from "./src/agents/initAgent.js";
 import { Client, Databases } from "node-appwrite";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
@@ -30,7 +30,7 @@ async function main() {
 
   console.log(`🧠 Running Agent with prompt: "${userPrompt}"\n`);
 
-  const result = await run(mathXAgent, userPrompt);
+  const result = await run(initAgent, userPrompt);
 
   console.log("✅ Final Output:\n", result.finalOutput);
   console.log("🧠 Actions performed:", result.actions);

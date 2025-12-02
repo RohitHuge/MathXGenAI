@@ -1,12 +1,12 @@
-import { supabaseTools } from "./src/supabaseTool.js";
+import { supabaseTools } from "../supabaseTool.js";
 import {
   getContestTool,
   getContestListTool,
   getQuestionbyContestId,
-} from "./src/appwriteTool.js";
+} from "../appwriteTool.js";
 import { Agent } from "@openai/agents";
 
-export const mathXAgent = new Agent({
+export const insightAgent = new Agent({
   name: "MathX Insight Agent",
   instructions: `
     You are the AI Insight Agent for the MathX platform. 🧠✨
