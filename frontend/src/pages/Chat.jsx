@@ -56,7 +56,7 @@ export default function Chat() {
             // const data = await response.json();
             setAttachment({
                 name: file.name,
-                file : file
+                file: file
             });
         } catch (error) {
             console.error('Upload error:', error);
@@ -197,12 +197,13 @@ export default function Chat() {
         // }
         const formdata = new FormData();
         formdata.append('message', userMessage.text);
-        formdata.append('file', attachment.file);
+        attachment?.file && formdata.append('file', attachment.file);
+        
+        
         try {
-           const res = await fetch(`${backendUrl}/api/chat/upload`, {
+            const res = await fetch(`${backendUrl}/api/chat/upload`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'X-User-ID': user.$id
                 },
                 body: formdata
@@ -216,7 +217,7 @@ export default function Chat() {
             setLoading(false);
             const agentMessage = {
                 id: Date.now(),
-                text: data.text,
+                text: data.response,
                 sender: 'agent',
                 timestamp: new Date().toISOString(),
             };
