@@ -245,6 +245,18 @@ export default function Chat() {
         }
     };
 
+    const preprocessLatex = (content) => {
+        if (typeof content !== 'string') return content;
+
+        // Replace \[ ... \] with $$ ... $$
+        let processed = content.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+
+        // Replace \( ... \) with $ ... $
+        processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+
+        return processed;
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex flex-col">
             {/* Header */}
@@ -336,7 +348,7 @@ export default function Chat() {
                                                     remarkPlugins={[remarkGfm, remarkMath]}
                                                     rehypePlugins={[rehypeKatex]}
                                                 >
-                                                    {message.text}
+                                                    {preprocessLatex(message.text)}
                                                 </ReactMarkdown>
 
                                             </div>
