@@ -19,6 +19,7 @@
   "dependencies": {
     "@openai/agents": "^0.3.0",
     "@supabase/supabase-js": "^2.80.0",
+    "axios": "^1.13.2",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

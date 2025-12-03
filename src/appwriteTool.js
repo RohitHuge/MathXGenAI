@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { Query } from "node-appwrite";
-import { db } from "../run.js";
+import { db } from "./config.js";
 
 export const getContestTool = tool({
   name: "get_contest",

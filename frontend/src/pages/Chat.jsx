@@ -128,9 +128,32 @@ export default function Chat() {
         };
     }, [user]);
 
+    const [pendingQuestions, setPendingQuestions] = useState([]);
+
     useEffect(() => {
         loadChatHistory();
+        checkPendingQuestions();
     }, []);
+
+    const checkPendingQuestions = async () => {
+        if (!user) return;
+        try {
+            const response = await fetch(`${backendUrl}/api/questions/pending`, {
+                headers: {
+                    'X-User-ID': user.$id
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.questions && data.questions.length > 0) {
+                    setPendingQuestions(data.questions);
+                    setIsUploadModalOpen(true);
+                }
+            }
+        } catch (error) {
+            console.error("Error checking pending questions:", error);
+        }
+    };
 
     useEffect(() => {
         scrollToBottom();
@@ -198,8 +221,8 @@ export default function Chat() {
         const formdata = new FormData();
         formdata.append('message', userMessage.text);
         attachment?.file && formdata.append('file', attachment.file);
-        
-        
+
+
         try {
             const res = await fetch(`${backendUrl}/api/chat/upload`, {
                 method: 'POST',
@@ -472,6 +495,10 @@ export default function Chat() {
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
                 socket={socketRef.current}
+                pendingQuestions={pendingQuestions}
+                onProcessComplete={() => {
+                    checkPendingQuestions(); // Refresh after processing
+                }}
             />
         </div>
     );

@@ -1,8 +1,9 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import dotenv from "dotenv";
-import { supabasepg } from "../run.js";
+import { supabasepg } from "./config.js";
 import { Client } from "pg";
+import { supabase } from "./config.js";
 dotenv.config();
 
 /**
@@ -127,6 +128,44 @@ export const directPgTool = tool({
 
 
 /**
+ * 🧠 Tool #4: Save Pending Question
+ * Saves an extracted question to the pending_questions table.
+ */
+export const savePendingQuestionTool = tool({
+  name: "save_pending_question",
+  description: "Saves an extracted question to the database for user review.",
+  parameters: z.object({
+    question_body: z.string().describe("The text of the question."),
+    options: z.array(z.string()).describe("Array of options (LaTeX strings)."),
+    correct_answer: z.string().describe("The correct answer (e.g., 'A', 'B', or the option text)."),
+    latex: z.string().describe("The raw LaTeX representation of the question."),
+    contest_id: z.string().describe("The contest ID"),
+    user_id: z.string().describe("The user ID (Supabase ID) to associate the question with."),
+  }),
+  async execute({ question_body, options, correct_answer, latex, contest_id, user_id }) {
+    try {
+      console.log("💾 Supabase Tool: Saving pending question...");
+      const { data, error } = await supabase.from("pending_questions").insert({
+        question_body,
+        options,
+        correct_answer,
+        latex,
+        contest_id,
+        user_id,
+      });
+      if (error) {
+        throw error;
+      }
+      return `✅ Pending question saved successfully.`;
+    }
+    catch (err) {
+      return `❌ Failed to save pending question: ${err.message}`;
+    }
+  }
+
+});
+
+/**
  * 🧩 Unified Export
  * Simplifies agent.js imports.
  */
@@ -134,4 +173,5 @@ export const supabaseTools = [
   listSupabaseTablesTool,
   getSupabaseTableSchemaTool,
   directPgTool,
+  savePendingQuestionTool,
 ];

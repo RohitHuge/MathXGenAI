@@ -6,6 +6,7 @@ import { run } from "@openai/agents";
 import { createServer } from "http";
 import { initAgent } from "./src/agents/initAgent.js";
 import { initSocket } from "./src/socketManager.js";
+import { db } from "./src/config.js";
 
 dotenv.config();
 
@@ -323,6 +324,92 @@ app.get("/api/chat/history", authenticateUser, async (req, res) => {
     } catch (error) {
         console.error("Chat history error:", error);
         res.status(500).json({ error: "Failed to retrieve chat history" });
+    }
+});
+
+app.get("/api/questions/pending", authenticateUser, async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from("pending_questions")
+            .select("*")
+            .eq("user_id", req.user.supabaseId)
+            .eq("status", "pending")
+            .order("created_at", { ascending: true });
+
+        if (error) throw error;
+        res.json({ questions: data });
+    } catch (error) {
+        console.error("Error fetching pending questions:", error);
+        res.status(500).json({ error: "Failed to fetch pending questions" });
+    }
+});
+
+app.post("/api/questions/process", authenticateUser, async (req, res) => {
+    try {
+        const { questionId, action, updatedData } = req.body; // action: 'approve' | 'reject'
+
+        if (!questionId || !action) {
+            return res.status(400).json({ error: "Missing questionId or action" });
+        }
+
+        if (action === "reject") {
+            const { error } = await supabase
+                .from("pending_questions")
+                .update({ status: "rejected" })
+                .eq("id", questionId)
+                .eq("user_id", req.user.supabaseId);
+
+            if (error) throw error;
+            return res.json({ success: true, message: "Question rejected" });
+        }
+
+        if (action === "approve") {
+            // 1. Fetch the question details
+            const { data: question, error: fetchError } = await supabase
+                .from("pending_questions")
+                .select("*")
+                .eq("id", questionId)
+                .eq("user_id", req.user.supabaseId)
+                .single();
+
+            if (fetchError || !question) throw fetchError || new Error("Question not found");
+
+            // 2. Upload to Appwrite
+            const finalQuestion = { ...question, ...updatedData };
+
+            // Use hardcoded DB ID from appwriteTool.js for consistency
+            const DATABASE_ID = "68adceb9000bb9b8310b";
+            const COLLECTION_ID = "questions";
+
+            const result = await db.createDocument(
+                DATABASE_ID,
+                COLLECTION_ID,
+                "unique()",
+                {
+                    contest_id: finalQuestion.contest_id || "default",
+                    question_text: finalQuestion.question_body,
+                    options: finalQuestion.options,
+                    correct_option: finalQuestion.correct_answer,
+                    marks: 4 // Default marks
+                }
+            );
+
+            // 3. Update status to approved
+            const { error: updateError } = await supabase
+                .from("pending_questions")
+                .update({ status: "approved" })
+                .eq("id", questionId);
+
+            if (updateError) throw updateError;
+
+            return res.json({ success: true, message: "Question approved and uploaded", appwriteId: result.$id });
+        }
+
+        res.status(400).json({ error: "Invalid action" });
+
+    } catch (error) {
+        console.error("Error processing question:", error);
+        res.status(500).json({ error: "Failed to process question" });
     }
 });
 

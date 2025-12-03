@@ -5,7 +5,7 @@ import rehypeKatex from 'rehype-katex';
 import remarkMath from 'remark-math';
 import 'katex/dist/katex.min.css'; // Ensure CSS is imported
 
-export default function QuestionUploadModal({ isOpen, onClose, socket }) {
+export default function QuestionUploadModal({ isOpen, onClose, socket, pendingQuestions = [], onProcessComplete }) {
     const { user } = useAuth();
     const [step, setStep] = useState('upload'); // upload, processing, approval, done
     const [progress, setProgress] = useState({ phase: '', percent: 0, detail: '' });
@@ -14,9 +14,25 @@ export default function QuestionUploadModal({ isOpen, onClose, socket }) {
     const [file, setFile] = useState(null);
     const [contestHint, setContestHint] = useState('');
     const [metrics, setMetrics] = useState({ total: 0, approved: 0, rejected: 0 });
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-    // WebSocket listeners removed as we shifted to HTTP
-    // useEffect(() => { ... }, [isOpen, socket]);
+    useEffect(() => {
+        if (pendingQuestions && pendingQuestions.length > 0) {
+            setStep('approval');
+            setCurrentQuestionIndex(0);
+            setCurrentQuestion({
+                index: 1,
+                question: {
+                    body: pendingQuestions[0].question_body,
+                    choices: pendingQuestions[0].options,
+                    answer: pendingQuestions[0].correct_answer,
+                    id: pendingQuestions[0].id,
+                    contest_id: pendingQuestions[0].contest_id
+                }
+            });
+            setMetrics(prev => ({ ...prev, total: pendingQuestions.length }));
+        }
+    }, [pendingQuestions]);
 
     const handleStartUpload = async () => {
         if (!file) return;
@@ -50,36 +66,19 @@ export default function QuestionUploadModal({ isOpen, onClose, socket }) {
             const data = await response.json();
 
             // The backend now returns the agent response directly
-            // We need to parse the agent response to see if it's a question approval request or done
-            // For this specific flow, the agent might return a JSON string in the text
-
+            // The agent saves to DB and returns a message.
             console.log("Agent Response:", data.response);
 
-            // Heuristic: If response contains "question" and "choices", it's likely an approval needed
-            // This logic depends on what the agent returns. 
-            // Assuming the agent returns a JSON string for the question structure.
-
-            try {
-                // Try to find JSON in the response text
-                const jsonMatch = data.response.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    if (parsed.question || parsed.body) {
-                        setStep('approval');
-                        setCurrentQuestion({
-                            index: 1, // Mock index for now
-                            question: parsed.question || parsed
-                        });
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.log("Could not parse JSON from agent response", e);
+            // Trigger refresh of pending questions
+            if (onProcessComplete) {
+                onProcessComplete();
             }
 
-            // If no question structure found, assume it's a general summary or done
-            setStep('done');
-            setSummary(data.response);
+            // We don't need to parse JSON anymore as the agent saves to DB.
+            // The useEffect will pick up the new pending questions.
+            // But we might want to show a "Processing..." state until then?
+            // Actually, onProcessComplete calls checkPendingQuestions which updates prop.
+            // So we just wait.
 
         } catch (error) {
             console.error("Upload error:", error);
@@ -91,55 +90,57 @@ export default function QuestionUploadModal({ isOpen, onClose, socket }) {
     const handleDecision = async (decision) => {
         if (currentQuestion) {
             setStep('processing');
-            setProgress({ phase: 'Processing decision...', percent: 0, detail: 'Agent is updating...' });
+            setProgress({ phase: 'Processing decision...', percent: 0, detail: 'Updating status...' });
 
             try {
-                const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/chat/upload`, {
+                const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/questions/process`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-User-ID': user?.$id
                     },
                     body: JSON.stringify({
-                        message: `Decision for Question ${currentQuestion.index}: ${decision}`,
-                        contestHint: contestHint
+                        questionId: currentQuestion.question.id,
+                        action: decision,
+                        updatedData: {
+                            // If we had edit functionality, pass updated fields here
+                        }
                     })
                 });
 
-                const data = await response.json();
+                if (!response.ok) throw new Error('Failed to process decision');
 
                 // Update local metrics
                 setMetrics(prev => ({
                     ...prev,
-                    [decision === 'approve' ? 'approved' : 'rejected']: prev[decision === 'approve' ? 'approved' : 'rejected'] + 1,
-                    total: prev.total + 1
+                    [decision === 'approve' ? 'approved' : 'rejected']: prev[decision === 'approve' ? 'approved' : 'rejected'] + 1
                 }));
 
-                // Check if there are more questions or done
-                // For now, just go to done or stay in loop if agent sends another question
-                try {
-                    const jsonMatch = data.response.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) {
-                        const parsed = JSON.parse(jsonMatch[0]);
-                        if (parsed.question || parsed.body) {
-                            setStep('approval');
-                            setCurrentQuestion({
-                                index: metrics.total + 2,
-                                question: parsed.question || parsed
-                            });
-                            return;
+                // Move to next question
+                const nextIndex = currentQuestionIndex + 1;
+                if (nextIndex < pendingQuestions.length) {
+                    setCurrentQuestionIndex(nextIndex);
+                    setCurrentQuestion({
+                        index: nextIndex + 1,
+                        question: {
+                            body: pendingQuestions[nextIndex].question_body,
+                            choices: pendingQuestions[nextIndex].options,
+                            answer: pendingQuestions[nextIndex].correct_answer,
+                            id: pendingQuestions[nextIndex].id,
+                            contest_id: pendingQuestions[nextIndex].contest_id
                         }
-                    }
-                } catch (e) {
-                    // ignore
+                    });
+                    setStep('approval');
+                } else {
+                    // Done
+                    setStep('done');
+                    if (onProcessComplete) onProcessComplete(); // Refresh parent
                 }
-
-                setStep('done');
-                setSummary(data.response);
 
             } catch (error) {
                 console.error("Decision error:", error);
                 // Handle error
+                setStep('approval'); // Go back to approval on error
             }
         }
     };

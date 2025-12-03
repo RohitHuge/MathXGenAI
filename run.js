@@ -1,27 +1,9 @@
 import { run } from "@openai/agents";
 import { initAgent } from "./src/agents/initAgent.js";
-import { Client, Databases } from "node-appwrite";
-import { createClient } from "@supabase/supabase-js";
+import { db, supabase, openAi, supabasepg } from "./src/config.js";
 import dotenv from "dotenv";
-import OpenAI from "openai";
+
 dotenv.config();
-
-const client = new Client()
-  .setEndpoint(process.env.APPWRITE_ENDPOINT)
-  .setProject(process.env.APPWRITE_PROJECT_ID)
-  .setKey(process.env.APPWRITE_API_KEY);
-
-export const db = new Databases(client);
-export const supabasepg = process.env.SUPABASE_DB_URL;
-
-export const openAi = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
-
-export const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
 
 async function main() {
   // ✅ Take the user prompt from command line

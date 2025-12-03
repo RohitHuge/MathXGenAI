@@ -1,9 +1,10 @@
 // import OpenAI from "openai";
-import { tool } from "openai/agents";
-import fs from "node:fs";
-import {z} from "zod";
+import { tool } from "@openai/agents";
+// import fs from "node:fs";
+import axios from "axios";
+import { z } from "zod";
 import dotenv from "dotenv";
-import {openAi} from "../../run.js";
+import { openAi } from "../config.js";
 dotenv.config();
 
 // const openAi = new OpenAI({
@@ -27,34 +28,26 @@ export const getQuestionTool = tool({
         ).describe("Extracted question from the PDF file."),
     }),
     async execute({ pdfUrl }) {
-        const file = await openAi.files.create({
-            file: fs.createReadStream(pdfUrl),
-            purpose: "input",
-        });
-        const fileID = file.id;
-        
-        const response = await openAi.responses.create({
-            model: "o4-mini",
-            input:[
+    const response = await openAi.responses.create({
+    model: "gpt-5",
+    input: [
+        {
+            role: "user",
+            content: [
                 {
-                    role:system,
-                    content:[
-                        {
-                            type:"text",
-                            text:"You are provided with a PDF file. Extract a question from the PDF file. in the format of JSON object.",
-                        },
-                        {
-                            type:"file",
-                            file:fileID,
-                        }
-                    ]
-                }
-            ]
-            
-        })
+                    type: "input_text",
+                    text: "Analyze the pdf and give the question in the pdf in the form of json array",
+                },
+                {
+                    type: "input_file",
+                    file_url: pdfUrl,
+                },
+            ],
+        },
+    ],
+    });
 
+    return response.output;
+    }
 
-        const result = response.choices[0].message.content;
-        return result;
-    },
 });
