@@ -19,7 +19,7 @@ export default function Chat() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(true);
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(true);
     const [attachment, setAttachment] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const messagesEndRef = useRef(null);
@@ -132,28 +132,7 @@ export default function Chat() {
 
     useEffect(() => {
         loadChatHistory();
-        checkPendingQuestions();
     }, []);
-
-    const checkPendingQuestions = async () => {
-        if (!user) return;
-        try {
-            const response = await fetch(`${backendUrl}/api/questions/pending`, {
-                headers: {
-                    'X-User-ID': user.$id
-                }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.questions && data.questions.length > 0) {
-                    setPendingQuestions(data.questions);
-                    setIsUploadModalOpen(true);
-                }
-            }
-        } catch (error) {
-            console.error("Error checking pending questions:", error);
-        }
-    };
 
     useEffect(() => {
         scrollToBottom();
@@ -495,10 +474,6 @@ export default function Chat() {
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
                 socket={socketRef.current}
-                pendingQuestions={pendingQuestions}
-                onProcessComplete={() => {
-                    checkPendingQuestions(); // Refresh after processing
-                }}
             />
         </div>
     );

@@ -329,10 +329,11 @@ app.get("/api/chat/history", authenticateUser, async (req, res) => {
 
 app.get("/api/questions/pending", authenticateUser, async (req, res) => {
     try {
+        // console.log("Fetching pending questions for user:", req.user);
         const { data, error } = await supabase
             .from("pending_questions")
             .select("*")
-            .eq("user_id", req.user.supabaseId)
+            .eq("user_id", req.user.appwriteId)
             .eq("status", "pending")
             .order("created_at", { ascending: true });
 
@@ -357,7 +358,7 @@ app.post("/api/questions/process", authenticateUser, async (req, res) => {
                 .from("pending_questions")
                 .update({ status: "rejected" })
                 .eq("id", questionId)
-                .eq("user_id", req.user.supabaseId);
+                .eq("user_id", req.user.appwriteId);
 
             if (error) throw error;
             return res.json({ success: true, message: "Question rejected" });
@@ -369,7 +370,7 @@ app.post("/api/questions/process", authenticateUser, async (req, res) => {
                 .from("pending_questions")
                 .select("*")
                 .eq("id", questionId)
-                .eq("user_id", req.user.supabaseId)
+                .eq("user_id", req.user.appwriteId)
                 .single();
 
             if (fetchError || !question) throw fetchError || new Error("Question not found");
@@ -390,7 +391,7 @@ app.post("/api/questions/process", authenticateUser, async (req, res) => {
                     question_text: finalQuestion.question_body,
                     options: finalQuestion.options,
                     correct_option: finalQuestion.correct_answer,
-                    marks: 4 // Default marks
+                    marks: 10 // Default marks
                 }
             );
 
