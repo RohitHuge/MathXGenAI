@@ -1,55 +1,60 @@
-import { tool } from "@openai/agents";
-import { z } from "zod";
-import { PDFParse } from 'pdf-parse';
-import fs from "fs";
-import https from "https";
+// import OpenAI from "openai";
+import { tool } from "openai/agents";
+import fs from "node:fs";
+import {z} from "zod";
+import dotenv from "dotenv";
+import {openAi} from "../../run.js";
+dotenv.config();
 
-async function fetchPdfBuffer(url) {
-    return new Promise((resolve, reject) => {
-        https.get(url, (res) => {
-            const data = [];
-            res.on("data", (chunk) => data.push(chunk));
-            res.on("end", () => resolve(Buffer.concat(data)));
-            res.on("error", (err) => reject(err));
-        });
-    });
-}
+// const openAi = new OpenAI({
+//     apiKey: process.env.OPENAI_API_KEY,
+// });
 
-export const pdfIngestTool = tool({
-    name: "pdf_ingest",
-    description: "Ingests a PDF from a URL or local path and extracts text.",
+export const getQuestionTool = tool({
+    name: "getQuestion",
+    description: "You are provided with a PDF file. Extract a question from the PDF file. in the format of JSON object.",
     parameters: z.object({
-        fileUrl: z.string().describe("URL or path to the PDF file"),
+        pdfUrl: z.string().describe("Public URL of the PDF file."),
     }),
-    async execute({ fileUrl }) {
-        try {
-            console.log(`📄 Ingesting PDF from: ${fileUrl}`);
-            // let dataBuffer;
+    output: z.object({
+        questions: z.array(
+            {
+                index: z.number().describe("Index of the question."),
+                body: z.string().describe("Body of the question."),
+                choices: z.array(z.string()).describe("Choices of the question."),
+                answer: z.string().describe("Answer of the question."),
+            }
+        ).describe("Extracted question from the PDF file."),
+    }),
+    async execute({ pdfUrl }) {
+        const file = await openAi.files.create({
+            file: fs.createReadStream(pdfUrl),
+            purpose: "input",
+        });
+        const fileID = file.id;
+        
+        const response = await openAi.responses.create({
+            model: "o4-mini",
+            input:[
+                {
+                    role:system,
+                    content:[
+                        {
+                            type:"text",
+                            text:"You are provided with a PDF file. Extract a question from the PDF file. in the format of JSON object.",
+                        },
+                        {
+                            type:"file",
+                            file:fileID,
+                        }
+                    ]
+                }
+            ]
+            
+        })
 
-            // if (fileUrl.startsWith("http")) {
-            //     dataBuffer = await fetchPdfBuffer(fileUrl);
-            // } else {
-            //     dataBuffer = fs.readFileSync(fileUrl);
-            // }
-            const pdfData = new PDFParse({url: `${fileUrl}`});
 
-            const data = await pdfData.getText();
-
-            console.log(data);
-
-            // Basic page splitting (pdf-parse returns full text, but also has info. 
-            // For strict page-by-page, we might need pdf-lib or just split by form feed if present, 
-            // but pdf-parse gives one big text. 
-            // For now, we return the full text and metadata.)
-
-            return JSON.stringify({
-                text: data.text,
-                numpages: data.numpages,
-                info: data.info,
-            });
-        } catch (err) {
-            console.error("Error ingesting PDF:", err);
-            return `Error ingesting PDF: ${err.message}`;
-        }
+        const result = response.choices[0].message.content;
+        return result;
     },
 });

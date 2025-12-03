@@ -3,6 +3,7 @@ import { initAgent } from "./src/agents/initAgent.js";
 import { Client, Databases } from "node-appwrite";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import OpenAI from "openai";
 dotenv.config();
 
 const client = new Client()
@@ -12,6 +13,10 @@ const client = new Client()
 
 export const db = new Databases(client);
 export const supabasepg = process.env.SUPABASE_DB_URL;
+
+export const openAi = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
 
 export const supabase = createClient(
   process.env.SUPABASE_URL,

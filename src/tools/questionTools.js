@@ -1,5 +1,10 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
+import {openAi} from "../../run.js";
+// import openai from "../openai.js";
+// import dotenv from "dotenv";
+// dotenv.config();
+
 
 // Mocking LLM calls for now, or we could use the agent runner to call an LLM.
 // Since these are tools used BY an agent, they might just be deterministic or call another service.
@@ -7,59 +12,82 @@ import { z } from "zod";
 // In a real implementation, this tool might call OpenAI API directly or be a "function" that the agent uses to structure data.
 // For this implementation, we will simulate the segmentation to show the flow.
 
-export const questionSegmenterTool = tool({
-    name: "question_segmenter",
-    description: "Segments raw text into structured questions.",
+// export const questionSegmenterTool = tool({
+//     name: "question_segmenter",
+//     description: "Segments raw text into structured questions.",
+//     parameters: z.object({
+//         rawText: z.string().describe("The raw text extracted from the PDF"),
+//     }),
+//     async execute({ rawText }) {
+//         console.log("✂️ Segmenting questions...");
+
+//         // SIMULATION: Splitting by "Question" or numbers
+//         // In reality, this would be an LLM call.
+
+//         const mockQuestions = [
+//             {
+//                 index: 1,
+//                 title: "Question 1",
+//                 body: "What is the value of pi?",
+//                 choices: ["3.14", "2.14", "4.14", "None"],
+//                 answer: "3.14",
+//                 marks: 5
+//             },
+//             {
+//                 index: 2,
+//                 title: "Question 2",
+//                 body: "Solve for x: 2x + 5 = 15",
+//                 choices: ["5", "10", "2", "0"],
+//                 answer: "5",
+//                 marks: 5
+//             }
+//         ];
+
+//         return JSON.stringify(mockQuestions);
+//     },
+// });
+
+export const questionUploadTool = tool({
+    name: "question_upload",
+    description: "Uploads a question to a specific contest.",
     parameters: z.object({
-        rawText: z.string().describe("The raw text extracted from the PDF"),
-    }),
-    async execute({ rawText }) {
-        console.log("✂️ Segmenting questions...");
-
-        // SIMULATION: Splitting by "Question" or numbers
-        // In reality, this would be an LLM call.
-
-        const mockQuestions = [
+        questions: z.array(
             {
-                index: 1,
-                title: "Question 1",
-                body: "What is the value of pi?",
-                choices: ["3.14", "2.14", "4.14", "None"],
-                answer: "3.14",
-                marks: 5
-            },
-            {
-                index: 2,
-                title: "Question 2",
-                body: "Solve for x: 2x + 5 = 15",
-                choices: ["5", "10", "2", "0"],
-                answer: "5",
-                marks: 5
+                index: z.number().describe("Index of the question."),
+                body: z.string().describe("Body of the question."),
+                choices: z.array(z.string()).describe("Choices of the question."),
+                answer: z.string().describe("Answer of the question."),
             }
-        ];
-
-        return JSON.stringify(mockQuestions);
-    },
-});
-
-export const latexifyTool = tool({
-    name: "latexify_text",
-    description: "Converts mathematical text into LaTeX format.",
-    parameters: z.object({
-        text: z.string(),
+        ).describe("Extracted question from the PDF file."),
+        contestId: z.string().describe("ID of the contest."),
     }),
-    async execute({ text }) {
-        console.log("✨ Latexifying text...");
+    async execute({ questions, contestId }) {
+        console.log(`✨ Uploading question to contest...${contestId}`);
 
-        // SIMULATION
-        // "2x + 5 = 15" -> "$2x + 5 = 15$"
 
-        const latexified = text.replace(/(\d+[a-z]|[a-z]\^2|[=+\-*/])/g, "$$$&$$"); // Very dumb regex for demo
+        for (const question of questions) {
+           console.log(`sending question ${question.index} for converting to latex`);
 
-        return JSON.stringify({
-            original: text,
-            latex: latexified,
-            snippets: [latexified]
+           const latexQuestion = await openAi.responses.parse({
+            model: "gpt-4o",
+            input: [
+                {
+                    role: "system",
+                    content: "You are provided with a question. Convert the question to latex format."
+                },
+                {
+                    role: "user",
+                    content: question
+                }
+            ]
         });
-    },
+
+        console.log(`question ${question.index} converted to latex`);
+        }
+
+
+        
+    }
 });
+    
+    
