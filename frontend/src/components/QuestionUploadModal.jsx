@@ -20,7 +20,7 @@ export default function QuestionUploadModal({ isOpen, onClose, socket }) {
         }
     }, [isOpen, pendingQuestions]);
 
-    if (!isOpen) return null;
+
 
     const currentQuestion = pendingQuestions[currentIndex];
     const isFinished = !currentQuestion && pendingQuestions.length > 0 && currentIndex >= pendingQuestions.length;
@@ -61,6 +61,8 @@ export default function QuestionUploadModal({ isOpen, onClose, socket }) {
             return () => clearTimeout(timer);
         }
     }, [isFinished, onClose]);
+
+    if (!isOpen) return null;
 
     const handleDecision = async (decision) => {
         if (!currentQuestion) return;

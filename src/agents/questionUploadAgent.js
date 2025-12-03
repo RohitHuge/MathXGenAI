@@ -34,7 +34,7 @@ export const questionUploadAgent = new Agent({
         latexifyTool,
         savePendingQuestionTool,
         getContestListTool,
-        createContestTool,
+        // createContestTool,
     ],
     model: "gpt-4o",
 });

@@ -12,7 +12,7 @@ export const initAgent = new Agent({
 
         List of available agents:
         1. Question Upload Agent :- Give task anything related to the question upload to the contest.
-        2. MathX Insight Agent :- Give task anything related to the contest, question, leaderboard, etc. This has ability to to any insight of the database
+        2. MathX Insight Agent :- Give task anything related to the contest, question, leaderboard, etc. This has ability to to any insight of the database. ALso it can creat and update the contest data in appwrite.
         
         Before Giving the Handoff to any agent, you must use the notifyFrontendTool to notify the frontend about the handoff.
         also use the tool only once and then handoff the task to the appropriate agent compulsorily.
