@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import 'katex/dist/katex.min.css';
 const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
-export default function QuestionUploadModal({ isOpen, onClose, socket} ) {
+export default function QuestionUploadModal({ isOpen, onClose, socket }) {
     const { user } = useAuth();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [pendingQuestions, setPendingQuestions] = useState([]);
@@ -27,26 +27,26 @@ export default function QuestionUploadModal({ isOpen, onClose, socket} ) {
 
 
     const checkPendingQuestions = async () => {
-            if (!user) return;
-            try {
-                console.log("Checking pending questions...");
-                const response = await fetch(`${backendUrl}/api/questions/pending`, {
-                    headers: {
-                        'X-User-ID': user.$id
-                    }
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log("Pending questions:", data);
-                    if (data.questions && data.questions.length > 0) {
-                        setPendingQuestions(data.questions);
-                        // setIsUploadModalOpen(true);
-                    }
+        if (!user) return;
+        try {
+            console.log("Checking pending questions...");
+            const response = await fetch(`${backendUrl}/api/questions/pending`, {
+                headers: {
+                    'X-User-ID': user.$id
                 }
-            } catch (error) {
-                console.error("Error checking pending questions:", error);
+            });
+            if (response.ok) {
+                const data = await response.json();
+                console.log("Pending questions:", data);
+                if (data.questions && data.questions.length > 0) {
+                    setPendingQuestions(data.questions);
+                    // setIsUploadModalOpen(true);
+                }
             }
-        };
+        } catch (error) {
+            console.error("Error checking pending questions:", error);
+        }
+    };
 
     useEffect(() => {
         checkPendingQuestions();
@@ -57,7 +57,7 @@ export default function QuestionUploadModal({ isOpen, onClose, socket} ) {
             // Small delay to show success state if needed, or just close
             const timer = setTimeout(() => {
                 onClose();
-                }, 1000);
+            }, 1000);
             return () => clearTimeout(timer);
         }
     }, [isFinished, onClose]);
@@ -130,7 +130,7 @@ export default function QuestionUploadModal({ isOpen, onClose, socket} ) {
     const renderQuestion = () => {
         if (!currentQuestion) return null;
 
-        const { contest_id, question_body, options, correct_answer } = currentQuestion;
+        const { contest_id, latex, options, correct_answer } = currentQuestion;
 
         // Parse options if they are strings (JSON stringified in DB)
         let parsedOptions = [];
@@ -164,7 +164,7 @@ export default function QuestionUploadModal({ isOpen, onClose, socket} ) {
                     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm mb-6">
                         <div className="prose dark:prose-invert max-w-none mb-6 text-lg">
                             <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                {question_body}
+                                {latex.trim().startsWith('$') ? latex : `$${latex}$`}
                             </ReactMarkdown>
                         </div>
 
@@ -173,19 +173,19 @@ export default function QuestionUploadModal({ isOpen, onClose, socket} ) {
                                 const isCorrect = choice === correct_answer || String.fromCharCode(65 + i) === correct_answer;
                                 return (
                                     <div key={i} className={`p-4 rounded-lg border transition-all ${isCorrect
-                                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20 ring-1 ring-green-500'
-                                            : 'border-gray-200 dark:border-gray-700'
+                                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20 ring-1 ring-green-500'
+                                        : 'border-gray-200 dark:border-gray-700'
                                         }`}>
                                         <div className="flex items-start">
                                             <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border mr-4 ${isCorrect
-                                                    ? 'bg-green-500 text-white border-green-500'
-                                                    : 'border-gray-300 text-gray-500 dark:border-gray-600 dark:text-gray-400'
+                                                ? 'bg-green-500 text-white border-green-500'
+                                                : 'border-gray-300 text-gray-500 dark:border-gray-600 dark:text-gray-400'
                                                 }`}>
                                                 {String.fromCharCode(65 + i)}
                                             </span>
                                             <div className="prose dark:prose-invert prose-base max-w-none pt-1">
                                                 <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                                    {choice}
+                                                    {choice.trim().startsWith('$') ? choice : `$${choice}$`}
                                                 </ReactMarkdown>
                                             </div>
                                         </div>

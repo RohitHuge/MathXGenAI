@@ -19,7 +19,7 @@ export default function Chat() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(true);
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(true);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [attachment, setAttachment] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const messagesEndRef = useRef(null);

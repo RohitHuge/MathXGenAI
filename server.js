@@ -382,15 +382,20 @@ app.post("/api/questions/process", authenticateUser, async (req, res) => {
             const DATABASE_ID = "68adceb9000bb9b8310b";
             const COLLECTION_ID = "questions";
 
+            console.log("Final Question:", finalQuestion);
+
             const result = await db.createDocument(
                 DATABASE_ID,
                 COLLECTION_ID,
                 "unique()",
                 {
                     contest_id: finalQuestion.contest_id || "default",
-                    question_text: finalQuestion.question_body,
-                    options: finalQuestion.options,
-                    correct_option: finalQuestion.correct_answer,
+                    question: finalQuestion.latex,
+                    optionA: finalQuestion.options[0],
+                    optionB: finalQuestion.options[1],
+                    optionC: finalQuestion.options[2],
+                    optionD: finalQuestion.options[3],
+                    answer: finalQuestion.correct_answer,
                     marks: 10 // Default marks
                 }
             );
