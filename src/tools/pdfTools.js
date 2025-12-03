@@ -13,20 +13,19 @@ dotenv.config();
 
 export const getQuestionTool = tool({
     name: "getQuestion",
-    description: "You are provided with a PDF file. Extract a question from the PDF file. in the format of JSON object.",
+    description: "You are provided with a PDF file. Get the question from the PDF file.",
     parameters: z.object({
         pdfUrl: z.string().describe("Public URL of the PDF file."),
     }),
-    output: z.object({
-        questions: z.array(
+    output: z.array(
             {
                 index: z.number().describe("Index of the question."),
-                body: z.string().describe("Body of the question."),
-                choices: z.array(z.string()).describe("Choices of the question."),
-                answer: z.string().describe("Answer of the question."),
+                body: z.string().describe("Body of the question.(in latex format)"),
+                choices: z.array(z.string()).describe("Choices of the question.(in latex format)"),
+                answer: z.enum(["A", "B", "C", "D"]).describe("Answer of the question.Option"),
             }
         ).describe("Extracted question from the PDF file."),
-    }),
+    
     async execute({ pdfUrl }) {
     const response = await openAi.responses.create({
     model: "gpt-5",
@@ -36,7 +35,7 @@ export const getQuestionTool = tool({
             content: [
                 {
                     type: "input_text",
-                    text: "Analyze the pdf and give the question in the pdf in the form of json array",
+                    text: "You are provided with a PDF file. Extract a question from the PDF file. Extrcact the question, options and its answer.And Convert the mathematical equation to latex format.",
                 },
                 {
                     type: "input_file",
@@ -46,7 +45,7 @@ export const getQuestionTool = tool({
         },
     ],
     });
-
+     console.log(JSON.stringify(response.output));
     return response.output;
     }
 
