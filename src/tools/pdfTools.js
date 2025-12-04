@@ -1,5 +1,6 @@
 // import OpenAI from "openai";
 import { tool } from "@openai/agents";
+import { supabase } from "../config.js";
 // import fs from "node:fs";
 // import axios from "axios";
 import { zodTextFormat } from "openai/helpers/zod.mjs";
@@ -26,6 +27,8 @@ export const getQuestionTool = tool({
     description: "You are provided with a PDF file. Get the question from the PDF file.",
     parameters: z.object({
         pdfUrl: z.string().describe("Public URL of the PDF file."),
+        contestId: z.string().describe("ID of the contest."),
+        userId: z.string().describe("ID of the user."),
     }),
     // output: z.array(
     //         {
@@ -36,7 +39,7 @@ export const getQuestionTool = tool({
     //         }
     //     ).describe("Extracted question from the PDF file."),
     
-    async execute({ pdfUrl }) {
+    async execute({ pdfUrl, contestId, userId }) {
     const response = await openAi.responses.create({
     model: "gpt-5",
     input: [
@@ -45,7 +48,7 @@ export const getQuestionTool = tool({
             content: [
                 {
                     type: "input_text",
-                    text: `You are provided with a PDF file. Extract a question from the PDF file. Extrcact the question, options and its answer.And Convert the mathematical equation to latex format.
+                    text: `You are provided with a PDF file. Extract all the questions, options and its answer from the PDF file.And Convert the mathematical equation to latex format.
             when you convert to latex keep in to always use dollar delimiters:
 
                 Inline math: use single dollar: $ ... $
@@ -82,7 +85,30 @@ export const getQuestionTool = tool({
     });
     const parsedOutput = JSON.parse(response.output_text);
     console.log(JSON.stringify(parsedOutput));
-    return parsedOutput;
+    console.log(`Detected ${parsedOutput.questions.length} questions in the PDF file.`);
+    
+
+    let successCount = 0;
+    let errorCount = 0;
+    for (const question of parsedOutput.questions) {
+        console.log(`sending question ${question.index} for converting to latex`);
+
+        const { data, error } = await supabase.from("pending_questions").insert({
+                question_body: question.body,
+                options: question.choices,
+                correct_answer: question.answer,
+                latex: question.body,
+                contest_id: contestId,
+                user_id: userId,
+              });
+              if (error) {
+                    errorCount++;
+              }else{
+                successCount++;
+              }
+
+    }
+    return `✅ ${successCount} questions saved successfully. ❌ ${errorCount} questions failed to save.`;
     }
 
 });
