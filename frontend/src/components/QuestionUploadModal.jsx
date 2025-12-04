@@ -166,7 +166,7 @@ export default function QuestionUploadModal({ isOpen, onClose, socket }) {
                     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm mb-6">
                         <div className="prose dark:prose-invert max-w-none mb-6 text-lg">
                             <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                {latex.trim().startsWith('$') ? latex : `$${latex}$`}
+                                {latex}
                             </ReactMarkdown>
                         </div>
 

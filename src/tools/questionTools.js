@@ -47,48 +47,48 @@ import { openAi } from "../config.js";
 //     },
 // });
 
-export const questionUploadTool = tool({
-    name: "question_upload",
-    description: "Uploads a question to a specific contest.",
-    parameters: z.object({
-        questions: z.array(
-            z.object({
-                index: z.number().describe("Index of the question."),
-                body: z.string().describe("Body of the question."),
-                choices: z.array(z.string()).describe("Choices of the question."),
-                answer: z.string().describe("Answer of the question."),
-            })
-        ).describe("Extracted question from the PDF file."),
-        contestId: z.string().describe("ID of the contest."),
-    }),
-    async execute({ questions, contestId }) {
-        console.log(`✨ Uploading question to contest...${contestId}`);
+// export const questionUploadTool = tool({
+//     name: "question_upload",
+//     description: "Uploads a question to a specific contest.",
+//     parameters: z.object({
+//         questions: z.array(
+//             z.object({
+//                 index: z.number().describe("Index of the question."),
+//                 body: z.string().describe("Body of the question."),
+//                 choices: z.array(z.string()).describe("Choices of the question."),
+//                 answer: z.string().describe("Answer of the question."),
+//             })
+//         ).describe("Extracted question from the PDF file."),
+//         contestId: z.string().describe("ID of the contest."),
+//     }),
+//     async execute({ questions, contestId }) {
+//         console.log(`✨ Uploading question to contest...${contestId}`);
 
 
-        for (const question of questions) {
-            console.log(`sending question ${question.index} for converting to latex`);
+//         for (const question of questions) {
+//             console.log(`sending question ${question.index} for converting to latex`);
 
-            const latexQuestion = await openAi.responses.parse({
-                model: "gpt-4o",
-                input: [
-                    {
-                        role: "system",
-                        content: "You are provided with a question. Convert the question to latex format."
-                    },
-                    {
-                        role: "user",
-                        content: question
-                    }
-                ]
-            });
+//             const latexQuestion = await openAi.responses.parse({
+//                 model: "gpt-4o",
+//                 input: [
+//                     {
+//                         role: "system",
+//                         content: "You are provided with a question. Convert the question to latex format."
+//                     },
+//                     {
+//                         role: "user",
+//                         content: question
+//                     }
+//                 ]
+//             });
 
-            console.log(`question ${question.index} converted to latex`);
-        }
+//             console.log(`question ${question.index} converted to latex`);
+//         }
 
 
 
-    }
-});
+//     }
+// });
 
 export const latexifyTool = tool({
     name: "latexify",
